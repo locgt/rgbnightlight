@@ -7,9 +7,7 @@ Some minor #define snippets borrowed from neopixel examples
 #include <EEPROM.h>
 #include <PinChangeInt.h>
 #include <Adafruit_NeoPixel.h>
-#ifdef __AVR_ATtiny85__ // Trinket, Gemma, etc.
-  #include <avr/power.h>
-#endif
+
 
 #define STATE_COLORS 1
 #define STATE_EFFECT 2
