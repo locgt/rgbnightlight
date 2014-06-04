@@ -13,8 +13,8 @@ Some minor #define snippets borrowed from neopixel examples
 #define STATE_EFFECT 2
 volatile boolean onoff; //helps the on/off states
 
-#define SLEEPTIMER  7200000 // 7200000 = 2 hours.  set to 0 to not turn off after a while
-
+//#define SLEEPTIMER  7200000 // 7200000 = 2 hours.  set to 0 to not turn off after a while
+#define SLEEPTIMER 0
 
 #define FOBPINA 5
 #define FOBPINB 4
@@ -36,9 +36,6 @@ volatile boolean onoff; //helps the on/off states
 
 
 /* Initiate variables and set defaults */
-int red=254;
-int green=254;
-int blue=254;
 volatile int bright=0 ;
 volatile uint32_t color;
 
@@ -128,15 +125,16 @@ void setup()
   pixels.begin();
   pixels.setBrightness(0);   //off
   pixels.show();
+  Serial.print("State: ");
+  Serial.println(state);
+  Serial.println("Setup complete, turning on");
 
-  turnOn();
     
 }
 
 void loop(){
 //    Only do stuff here for the effect.  Everything else is handled in interrups
 //    Oh, but also check the sleep timer and do nothing if we are "off".
-
   while(onoff == 1) {
     //check the sleeptimer
     if(millis() > sleeptimer && SLEEPTIMER ) { //if SLEEPTIMER is non 0
@@ -176,7 +174,7 @@ void turnOff(){
   for (int x=bright; x>0; x--){
       pixels.setBrightness(x);
       pixels.show();
-      delayMicroseconds(10000); //don't use delay and messup interrupts
+      //delayMicroseconds(10000); //don't use delay and messup interrupts
   }
   pixels.setBrightness(0); //handle brightness changes
   pixels.show();
@@ -190,20 +188,28 @@ void turnOff(){
   EEPROM.write(BRIGHTADDR, currentBrightLevel);
   EEPROM.write(COLORADDR, currentColorPreset);
   EEPROM.write(EFFECTADDR, currentEffectLevel);
+  Serial.println("Turning off");
 }
 
 void turnOn(){
   bright=brightlevels[currentBrightLevel];
-  for (int x=0; x<bright; x++){
+  color=colors[currentColorPreset];
+  for( int x =0 ; x< PIXELS ; x++)
+     pixels.setPixelColor(x, color);
+  pixels.setBrightness(bright);
+  pixels.show();
+/*  for (int x=0; x<bright; x++){
       pixels.setBrightness(x);
       pixels.show();
       delayMicroseconds(10000); //don't use delay and messup interrupts
   }
-  
-  pixels.setBrightness(bright); //handle brightness changes
-  pixels.show();
+*/  
   onoff = 1;
   sleeptimer = millis()+SLEEPTIMER;  //reset the sleeptimer 
+  Serial.print("Turning on brightness: ");
+  Serial.println(bright);
+  Serial.print("Color code:");
+  Serial.println(currentColorPreset);
 }
 
 
@@ -226,19 +232,22 @@ void fobHandler() {
     if(state != STATE_COLORS) {
       state = STATE_COLORS; //switch to this state and stop
       color=colors[currentColorPreset];
+      Serial.println("Switching to color mode");
     }
     else {  //the button was pushed when we were already in static color state
             //cycle through the preset colors
 
-      if(currentColorPreset < COLORPRESETS)
+      if(currentColorPreset < COLORPRESETS-1)
         currentColorPreset++;  //increment if not at max
       else {
         currentColorPreset=0;  //roll over
         color=colors[currentColorPreset];
       }
+      Serial.print("Switched to color index:");
+      Serial.println(currentColorPreset);
     }
-    for( i =0 ; i< PIXELS ; i++)
-      pixels.setPixelColor(i,color);
+    for( int x =0 ; x< PIXELS ; x++)
+      pixels.setPixelColor(x,color);
     pixels.show();
     return;  
   }
@@ -246,15 +255,15 @@ void fobHandler() {
   
   //Cycle brightness levels does not affect the state
   if(latest_interrupted_pin == FOBPINC) {  //quick easy change bright state
-    if(currentBrightLevel < BRIGHTLEVELS)
+    if(currentBrightLevel < BRIGHTLEVELS-1)
       currentBrightLevel++;  //increment if not at max
     else
       currentBrightLevel=0;  //roll over
     bright=brightlevels[currentBrightLevel];
-
     pixels.setBrightness(bright); //handle brightness changes
     pixels.show();
-
+    Serial.print("Setting brightness to: ");
+    Serial.println(bright);
   }
   
   //Put the machine into the effect state and the loop will handle updates
@@ -277,4 +286,3 @@ void fobHandler() {
 
 
 }
-
