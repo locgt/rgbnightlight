@@ -1,7 +1,5 @@
  /* 
-RGB Remote Nightlight v1 - Ben Miller @vmFoo 6-1-2014
-Some minor #define snippets borrowed from neopixel examples
-
+RGB Remote Nightlight v1 - Ben Miller @vmFoo 6-4-2014
 */
 
 #include <EEPROM.h>
