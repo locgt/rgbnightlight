@@ -1,4 +1,4 @@
-/* 
+ /* 
 RGB Remote Nightlight v1 - Ben Miller @vmFoo 6-1-2014
 Some minor #define snippets borrowed from neopixel examples
 
@@ -11,7 +11,6 @@ Some minor #define snippets borrowed from neopixel examples
 
 #define STATE_COLORS 1
 #define STATE_EFFECT 2
-volatile boolean onoff; //helps the on/off states
 
 //#define SLEEPTIMER  7200000 // 7200000 = 2 hours.  set to 0 to not turn off after a while
 #define SLEEPTIMER 0
@@ -36,41 +35,47 @@ volatile boolean onoff; //helps the on/off states
 
 
 /* Initiate variables and set defaults */
-volatile int bright=0 ;
-volatile uint32_t color;
+volatile boolean onoff; //helps the on/off states
 
-volatile int i=0;  //predeclare a counter integer
+volatile int bright=0 ;  //used to represet the current brightness
+volatile uint32_t color; //used to represet the current set color
+
+int i=0;  //predeclare a counter integer
 uint32_t sleeptimer; //if you are using a sleep timer that turns it off after a whlie
 
 uint32_t colors[COLORPRESETS]; //declare the color preset array
-volatile int currentColorPreset;  //
+int currentColorPreset;  //
 
 int brightlevels[BRIGHTLEVELS];
-volatile int currentBrightLevel;
+int currentBrightLevel;
 
-volatile int currentEffectLevel;  //1 to EFFECTLEVELS
-volatile uint32_t speedColorSlew;  //how fast the colors move from one to the other milisecond
-volatile uint32_t speedColorClimb;  //how quickly the change moves to the next pixel miliseconds
+int currentEffectLevel;  //1 to EFFECTLEVELS
+uint32_t speedColorSlew;  //how fast the colors move from one to the other milisecond
+uint32_t speedColorClimb;  //how quickly the change moves to the next pixel miliseconds
 
 uint32_t targetcolor;
-uint8_t latest_interrupted_pin;
+volatile uint8_t latest_interrupted_pin;
 
 
 //variable for managing toggle states
-volatile int foba=0;
-volatile int fobb=0;
-volatile int fobc=0;
-volatile int fobd=0;
+int foba=0;
+int fobb=0;
+int fobc=0;
+int fobd=0;
 
 
 
 //the almighty state variable for the state machine
-volatile int state;
+int state;
 
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(PIXELS, LEDPIN, NEO_GRB + NEO_KHZ800);
 
 void setup()
 {
+  //setup the debugging if available]
+  Serial.begin(19200);
+  Serial.println("RGB Remote Nightlight V1.0: Ready");
+
   //setup the pin modes  
   pinMode(FOBPINA, INPUT); 
   pinMode(FOBPINB, INPUT); 
@@ -78,10 +83,10 @@ void setup()
   pinMode(FOBPIND, INPUT); 
 
   //setup the interrupt on each of the pins
-  PCintPort::attachInterrupt(FOBPINA, &fobHandler, FALLING);
-  PCintPort::attachInterrupt(FOBPINB, &fobHandler, FALLING);
-  PCintPort::attachInterrupt(FOBPINC, &fobHandler, FALLING);
-  PCintPort::attachInterrupt(FOBPIND, &fobHandler, FALLING);
+  PCintPort::attachInterrupt(FOBPINA, &fobHandler, RISING);
+  PCintPort::attachInterrupt(FOBPINB, &fobHandler, RISING);
+  PCintPort::attachInterrupt(FOBPINC, &fobHandler, RISING);
+  PCintPort::attachInterrupt(FOBPIND, &fobHandler, RISING);
 
   //setup the preset colors the color button will cycle
   colors[0]=pixels.Color(255,0,0);  //
@@ -91,19 +96,14 @@ void setup()
   colors[4]=pixels.Color(0,255,255);  //
   colors[5]=pixels.Color(0,0,255);  //
   colors[6]=pixels.Color(255,255,255);  //
-  
+
   //setup the brightness levesl.  Evenly split between 1 and 255
-  for(int x=1; x < BRIGHTLEVELS; x++) {
+  for(int x=1; x <= BRIGHTLEVELS; x++) {
       brightlevels[x-1]=x*(255/BRIGHTLEVELS);
   }
     
   //set the sleeptimer
   sleeptimer=millis()+SLEEPTIMER;
-
-  //setup the debugging if available]
-  Serial.begin(19200);
-  Serial.println("RGB Remote Nightlight V1.0: Ready");
-
 
   //read the variables from EPROM and setup system
   EEPROM.write(STATEADDR, state);
@@ -127,26 +127,24 @@ void setup()
   pixels.show();
   Serial.print("State: ");
   Serial.println(state);
-  Serial.println("Setup complete, turning on");
+  Serial.println("Setup complete.  In off mode.");
 
-    
 }
 
 void loop(){
 //    Only do stuff here for the effect.  Everything else is handled in interrups
 //    Oh, but also check the sleep timer and do nothing if we are "off".
-  while(onoff == 1) {
+
+  if(latest_interrupted_pin) changeHandler();  //if an interrupt occured since the last loop
+
+  if(onoff == true) {
     //check the sleeptimer
     if(millis() > sleeptimer && SLEEPTIMER ) { //if SLEEPTIMER is non 0
       turnOff();
-      break;
     }
-  //do the effect stuff here
-
-
-
   }
- 
+  
+  
 }
 
 
@@ -175,10 +173,10 @@ void turnOff(){
       pixels.setBrightness(x);
       pixels.show();
       //delayMicroseconds(10000); //don't use delay and messup interrupts
-  }
+  } 
   pixels.setBrightness(0); //handle brightness changes
   pixels.show();
-  onoff=0;
+  onoff=false;
   /*record settings to EPROM here
   STATEADDR contains state variable
   BRIGHTADDR contains currentBrightLevel
@@ -188,63 +186,72 @@ void turnOff(){
   EEPROM.write(BRIGHTADDR, currentBrightLevel);
   EEPROM.write(COLORADDR, currentColorPreset);
   EEPROM.write(EFFECTADDR, currentEffectLevel);
-  Serial.println("Turning off");
+  Serial.println("Turned off");
 }
 
 void turnOn(){
   bright=brightlevels[currentBrightLevel];
   color=colors[currentColorPreset];
-  for( int x =0 ; x< PIXELS ; x++)
-     pixels.setPixelColor(x, color);
+  
+  for (int y=0; y < bright; y++){
+      pixels.setBrightness(y);
+      for( int x=0 ; x< PIXELS ; x++)
+         pixels.setPixelColor(x, color);
+      pixels.show();
+      //delayMicroseconds(10000); //don't use delay and messup interrupts
+  }
   pixels.setBrightness(bright);
   pixels.show();
-/*  for (int x=0; x<bright; x++){
-      pixels.setBrightness(x);
-      pixels.show();
-      delayMicroseconds(10000); //don't use delay and messup interrupts
-  }
-*/  
-  onoff = 1;
+  
+  onoff = true;
   sleeptimer = millis()+SLEEPTIMER;  //reset the sleeptimer 
   Serial.print("Turning on brightness: ");
   Serial.println(bright);
-  Serial.print("Color code:");
+  Serial.print("Color preset:");
   Serial.println(currentColorPreset);
 }
 
-
-void fobHandler() {
-  latest_interrupted_pin=PCintPort::arduinoPin;
-
+void changeHandler(){
+  uint32_t target; //for use in blending to the right color
+  
   //handle turning the pixels on and off
   if(latest_interrupted_pin == FOBPINA) {  //onoff state
-    if(onoff == 1) {  //we are on,  turn off
+  latest_interrupted_pin=0;
+    if(onoff == true) {  //we are on,  turn off
       turnOff();
-    }
-    if(onoff == 0) { //we are off, turn on    
+    } else{ //we are off, turn on
       turnOn();
     }
   }
   
-  
   //switch to color mode and cycle colors
-  if(latest_interrupted_pin == FOBPINB) { //quick easy change to color state and cycle
+  if(latest_interrupted_pin == FOBPINB && onoff) { //quick easy change to color state and cycle
+    latest_interrupted_pin=0;
+    
     if(state != STATE_COLORS) {
       state = STATE_COLORS; //switch to this state and stop
       color=colors[currentColorPreset];
       Serial.println("Switching to color mode");
+      for( int x =0 ; x< PIXELS ; x++)
+        pixels.setPixelColor(x,color);
+      pixels.show();
     }
     else {  //the button was pushed when we were already in static color state
             //cycle through the preset colors
-
       if(currentColorPreset < COLORPRESETS-1)
         currentColorPreset++;  //increment if not at max
       else {
         currentColorPreset=0;  //roll over
-        color=colors[currentColorPreset];
       }
+      color=colors[currentColorPreset];
+      for( int x =0 ; x< PIXELS ; x++)
+          pixels.setPixelColor(x,color);
+      pixels.show();
+
       Serial.print("Switched to color index:");
-      Serial.println(currentColorPreset);
+      Serial.print(currentColorPreset);
+      Serial.print(" which is ");
+      Serial.println(color);
     }
     for( int x =0 ; x< PIXELS ; x++)
       pixels.setPixelColor(x,color);
@@ -254,7 +261,8 @@ void fobHandler() {
   
   
   //Cycle brightness levels does not affect the state
-  if(latest_interrupted_pin == FOBPINC) {  //quick easy change bright state
+  if(latest_interrupted_pin == FOBPINC && onoff ) {  //quick easy change bright state but only if we're on
+  latest_interrupted_pin=0;
     if(currentBrightLevel < BRIGHTLEVELS-1)
       currentBrightLevel++;  //increment if not at max
     else
@@ -268,21 +276,28 @@ void fobHandler() {
   
   //Put the machine into the effect state and the loop will handle updates
   //repeated presses will cycle the speeds for color slew and climb
-  if(latest_interrupted_pin == FOBPIND) {
+  if(latest_interrupted_pin == FOBPIND && onoff) {
+  latest_interrupted_pin=0;
     if(state != STATE_EFFECT) {
-      state = STATE_EFFECT; //switch to this state and stop
+      Serial.println("Switched to effect state");
+      state = STATE_EFFECT; //switch to this state and let the effect loop do the work
       //don't change anything else
     }
     else {  //the button was pushed when we were already in static color state
             //cycle through the preset colors
-
+      Serial.println("Changing effect levels");
       if(currentEffectLevel < EFFECTLEVELS)
         setEffectLevel(currentEffectLevel+1);  //increment if not at max
       else {
         setEffectLevel(1);  //roll over
       }
     }
-  }
+  }      
+}
 
 
+void fobHandler() {
+  latest_interrupted_pin=PCintPort::arduinoPin;
+  //set the variable and get out of the interrupt code
+  //funky things can happen inside interrupt vectors
 }
