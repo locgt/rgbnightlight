@@ -1,5 +1,7 @@
  /* 
-RGB Remote Nightlight v1 - Ben Miller @vmFoo 6-4-2014
+RGB Remote Nightlight v1 - Ben Miller @vmFoo 6-1-2014
+Some minor #define snippets borrowed from neopixel examples
+
 */
 
 #include <EEPROM.h>
@@ -50,9 +52,16 @@ int currentBrightLevel;
 int currentEffectLevel;  //1 to EFFECTLEVELS
 uint32_t speedColorSlew;  //how fast the colors move from one to the other milisecond
 uint32_t speedColorClimb;  //how quickly the change moves to the next pixel miliseconds
+uint32_t climbCounter;  //timer counters to manage the effect
+uint32_t slewCounter;  //timer counters to manage the effect
+int climbTop;  //top of the climb arry
+uint32_t effectColors[PIXELS];  // Array to store the effect
+uint32_t targetColor;  //what color are we slewing towards
+uint32_t sourceColor; //what color are we slewing from
+int effectColorPreset;  //what color preset are we on for the effect
+int effectPassFlag=0; //used to flag when we are done slewing all pixels
 
-uint32_t targetcolor;
-volatile uint8_t latest_interrupted_pin;
+volatile uint8_t latest_interrupted_pin;  //to handle interrupts
 
 
 //variable for managing toggle states
@@ -95,6 +104,8 @@ void setup()
   colors[5]=pixels.Color(0,0,255);  //
   colors[6]=pixels.Color(255,255,255);  //
 
+
+
   //setup the brightness levesl.  Evenly split between 1 and 255
   for(int x=1; x <= BRIGHTLEVELS; x++) {
       brightlevels[x-1]=x*(255/BRIGHTLEVELS);
@@ -104,10 +115,21 @@ void setup()
   sleeptimer=millis()+SLEEPTIMER;
 
   //read the variables from EPROM and setup system
-  EEPROM.write(STATEADDR, state);
-  EEPROM.write(BRIGHTADDR, currentBrightLevel);
-  EEPROM.write(COLORADDR, currentColorPreset);
-  EEPROM.write(EFFECTADDR, currentEffectLevel);
+  state=EEPROM.read(STATEADDR);
+  currentBrightLevel=EEPROM.read(BRIGHTADDR);
+  currentColorPreset=EEPROM.read(COLORADDR);
+  currentEffectLevel=EEPROM.read(EFFECTADDR);
+  
+  Serial.println("Reading from EEPROM:");
+  Serial.print("State: ");
+  Serial.println(state);
+  Serial.print("Bright preset: ");
+  Serial.println(currentBrightLevel);
+  Serial.print("Color preset: ");
+  Serial.println(currentColorPreset);
+  Serial.print("Effect Level: ");
+  Serial.println(currentEffectLevel);
+    
   //set initial variables if 0 from eeprom
    if(state == 0) { 
     state=STATE_COLORS;
@@ -126,7 +148,27 @@ void setup()
   Serial.print("State: ");
   Serial.println(state);
   Serial.println("Setup complete.  In off mode.");
-
+  if(state==STATE_EFFECT) { 
+    turnOn();
+    setEffectLevel(currentEffectLevel);
+    effectColorPreset=currentColorPreset;
+    initializeEffect(effectColorPreset);
+  }
+/* color funciton debug lines
+  for(int x=0; x < COLORPRESETS; x++){
+     Serial.print("Color preset: ");
+     Serial.print(x);
+     Serial.print(" is ");
+     Serial.print(colors[x]);
+     Serial.print(".  With Red: ");
+     Serial.print(extractRed(colors[x]));     
+     Serial.print(" Green: ");     
+     Serial.print(extractGreen(colors[x]));
+     Serial.print(" Blue: ");     
+     Serial.print(extractBlue(colors[x]));
+     Serial.println(" mix.");         
+  }
+  */
 }
 
 void loop(){
@@ -142,8 +184,74 @@ void loop(){
     }
   }
   
-  
+  //If we are in effect mode, run the effect animation
+  if(state == STATE_EFFECT && onoff){
+/*    uint32_t speedColorSlew;  //how fast the colors move from one to the other milisecond
+    uint32_t speedColorClimb;  //how quickly the change moves to the next pixel miliseconds
+    uint32_t climbCounter;  //timer counters to manage the effect
+    uint32_t slewCounter;  //timer counters to manage the effect
+    int climbTop;  //top of the climb arry
+    int climbBottom; //bottom of the climb array
+    uint32_t effectColors;  // Array to store the effect
+    uint32_t targetColor;  //what color are we slewing towards
+    uint32_t sourceColor; //what color are we slewing from
+*/
+
+    if (millis() > climbCounter) { //handle the climb
+      if (climbTop<PIXELS) {
+         climbTop++;
+         climbCounter=millis()+speedColorClimb;
+      }
+    }
+    
+    effectPassFlag=0;
+    if (millis() > slewCounter) {
+      for(int x=0; x<climbTop; x++){ //handle the slew
+        if(effectColors[x] != targetColor) { //if it's not there yet, slew it
+          effectColors[x] = slewColor(effectColors[x], targetColor, (1) );
+        } else {
+          effectPassFlag++;  //increment this for each match
+        }
+        pixels.setPixelColor(x, effectColors[x]);
+      }
+      pixels.show();
+      if (effectPassFlag == PIXELS) { //this means all pixels are the target color
+        initializeEffect(effectColorPreset);  //start over      
+      }
+      slewCounter=millis()+speedColorSlew;  
+    }
+  }
 }
+
+
+void initializeEffect(int sourcePreset){
+      effectColorPreset=sourcePreset; //start the effect at the current preset color preset
+      Serial.print("In Function Initializing Effect with preset: ");
+      Serial.println(effectColorPreset);
+      
+      sourceColor=colors[effectColorPreset]; //our source, before we increment
+      //target is going to be the next preset
+      if (effectColorPreset < COLORPRESETS-1) {
+        effectColorPreset++;
+      }else {
+        effectColorPreset=0;
+      }
+      targetColor=colors[effectColorPreset]; //target, after increment
+      
+      climbTop=0;
+      //Verify that the colors are all set right and initialize the color array
+            
+      for( int x=0 ; x< PIXELS ; x++) {
+        effectColors[x]=sourceColor;
+        pixels.setPixelColor(x, effectColors[x]);
+      }
+      pixels.show();
+      
+      //set the timer for when to add another pixel to the climb
+      climbCounter=millis()+speedColorClimb;
+      effectPassFlag=0; //starting a new climb   
+}
+
 
 
 void setEffectLevel(int lvl){
@@ -151,6 +259,7 @@ void setEffectLevel(int lvl){
 
    //Level 1 shoudl be slowest setting
    currentEffectLevel=lvl;
+   
    //the speedColorSlew represents how many milli-increments the color is skewed per milli
    //if the slew is 1000 then the color will be slewed 1 per second.  If it is 10,000 it will be slewed 10 per second
    //the higher the number the faster the slew
@@ -160,7 +269,6 @@ void setEffectLevel(int lvl){
    //1000 means a pixel is added to the set that are slewing every second meaning the PIXELS pixel will start color slewing
    //after PIXELS seconds.
    //The LOWER the number the faster the climb
-   
    speedColorClimb= (MAXCLIMBSPEED / EFFECTLEVELS) * (EFFECTLEVELS +1 -lvl );  //invert the multiple to be slow a 1 and fast at EFFECTSLEVELS
      
 }
@@ -184,6 +292,16 @@ void turnOff(){
   EEPROM.write(BRIGHTADDR, currentBrightLevel);
   EEPROM.write(COLORADDR, currentColorPreset);
   EEPROM.write(EFFECTADDR, currentEffectLevel);
+  Serial.println("Writing to EEPROM:");
+  Serial.print("State: ");
+  Serial.println(state);
+  Serial.print("Bright preset: ");
+  Serial.println(currentBrightLevel);
+  Serial.print("Color preset: ");
+  Serial.println(currentColorPreset);
+  Serial.print("Effect Level: ");
+  Serial.println(currentEffectLevel);
+  
   Serial.println("Turned off");
 }
 
@@ -241,11 +359,13 @@ void changeHandler(){
       else {
         currentColorPreset=0;  //roll over
       }
-      color=colors[currentColorPreset];
-      for( int x =0 ; x< PIXELS ; x++)
-          pixels.setPixelColor(x,color);
-      pixels.show();
-
+      target=colors[currentColorPreset];
+      while( color != target ) {
+        color=slewColor(color, target, 1);
+        for( int x =0 ; x< PIXELS ; x++)
+            pixels.setPixelColor(x,color);
+        pixels.show();
+      }
       Serial.print("Switched to color index:");
       Serial.print(currentColorPreset);
       Serial.print(" which is ");
@@ -280,6 +400,9 @@ void changeHandler(){
       Serial.println("Switched to effect state");
       state = STATE_EFFECT; //switch to this state and let the effect loop do the work
       //don't change anything else
+      Serial.print("Starting First Effect Run with color preset: ");
+      Serial.println(currentColorPreset);  
+      initializeEffect(currentColorPreset); //initlialize the effect with the current presets
     }
     else {  //the button was pushed when we were already in static color state
             //cycle through the preset colors
@@ -292,6 +415,62 @@ void changeHandler(){
     }
   }      
 }
+
+
+
+int extractRed(uint32_t c) {
+  return (( c >> 16 ) & 0xFF);
+}
+ 
+int extractGreen(uint32_t c) {
+  return ( (c >> 8) & 0xFF );
+}
+ 
+int extractBlue(uint32_t c) {
+  return ( c & 0xFF );
+}
+
+uint32_t slewColor(uint32_t src, uint32_t targ, int slew){
+  //slew the source color one increment (slew) at a time torwards the target
+ int sred = extractRed(src);
+ int tred = extractRed(targ);
+ 
+ int sgreen = extractGreen(src);
+ int tgreen = extractGreen(targ);
+  
+ int sblue = extractBlue(src);
+ int tblue = extractBlue(targ);
+ 
+ return pixels.Color(
+   slewNum(sred,tred, slew),
+   slewNum(sgreen,tgreen, slew),
+   slewNum(sblue,tblue, slew)
+  );
+  
+}
+
+int slewNum(int src, int targ, int slew){
+  if (src < targ) { //if source is less than the targer, increment
+    if ((src + slew) > targ) {  //don't overshoot, just go to the color
+      src=targ;
+    }
+    else { //otherwise add the slew
+      src=src+slew;
+    }
+    return src;  //return the new number
+  }  
+
+  if (src > targ) { //if source is less than the targer, increment
+    if ((src - slew) < targ) {  //don't overshoot, just go to the color
+      src=targ;
+    }
+    else { //otherwise add the slew
+      src=src-slew;
+    }
+    return src;  //return the new number
+  }  
+}
+
 
 
 void fobHandler() {
