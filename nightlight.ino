@@ -24,9 +24,9 @@ Some minor #define snippets borrowed from neopixel examples
 #define PIXELS 52
 #define COLORPRESETS 7   //how many preset colors are there
 #define BRIGHTLEVELS 7 //how many brightness levels there are (excluding off)
-#define EFFECTLEVELS 7 //how many effect levels there are.  Controling slew and climb
-#define MAXCOLORSLEW 10000 //how many milli-increments to slew the color each cycle
-#define MAXCLIMBSPEED 1000 //how many millis between adding anothe pixel to the effect
+#define EFFECTLEVELS 10 //how many effect levels there are.  Controling slew and climb
+#define MAXCOLORSLEW 100 //maximum: how many millis between slewing the pixel set color
+#define MAXCLIMBSPEED 1000 //maximum: how many millis between adding another pixel to the effect
 
 #define STATEADDR 1
 #define BRIGHTADDR 2
@@ -35,7 +35,7 @@ Some minor #define snippets borrowed from neopixel examples
 
 
 /* Initiate variables and set defaults */
-volatile boolean onoff; //helps the on/off states
+volatile boolean onoff = false; //helps the on/off states
 
 volatile int bright=0 ;  //used to represet the current brightness
 volatile uint32_t color; //used to represet the current set color
@@ -148,12 +148,14 @@ void setup()
   Serial.print("State: ");
   Serial.println(state);
   Serial.println("Setup complete.  In off mode.");
-  if(state==STATE_EFFECT) { 
-    turnOn();
+//  if(state==STATE_EFFECT) { 
     setEffectLevel(currentEffectLevel);
     effectColorPreset=currentColorPreset;
     initializeEffect(effectColorPreset);
-  }
+//    if(onoff)
+//          turnOn();
+//  }
+  
 /* color funciton debug lines
   for(int x=0; x < COLORPRESETS; x++){
      Serial.print("Color preset: ");
@@ -201,6 +203,10 @@ void loop(){
       if (climbTop<PIXELS) {
          climbTop++;
          climbCounter=millis()+speedColorClimb;
+         Serial.print("Incrementing climbTop: ");
+         Serial.println(climbTop);
+         if(latest_interrupted_pin) changeHandler();  //if an interrupt occured since the last loop
+
       }
     }
     
@@ -208,11 +214,22 @@ void loop(){
     if (millis() > slewCounter) {
       for(int x=0; x<climbTop; x++){ //handle the slew
         if(effectColors[x] != targetColor) { //if it's not there yet, slew it
-          effectColors[x] = slewColor(effectColors[x], targetColor, (1) );
+//            Serial.print(".");
+//          Serial.print("Slewing Pixel ");
+//          Serial.print(x);
+//          Serial.print(" from ");
+//          Serial.print(effectColors[x]);
+          effectColors[x] = slewColor(effectColors[x], targetColor, 1 ); //slew one increment
+//          Serial.print(" to ");
+//          Serial.println(effectColors[x]);
+          
+          if(latest_interrupted_pin) changeHandler();  //if an interrupt occured since the last loop
+
         } else {
-          effectPassFlag++;  //increment this for each match
+          effectPassFlag++;  //increment this for each color match
         }
         pixels.setPixelColor(x, effectColors[x]);
+
       }
       pixels.show();
       if (effectPassFlag == PIXELS) { //this means all pixels are the target color
@@ -220,6 +237,11 @@ void loop(){
       }
       slewCounter=millis()+speedColorSlew;  
     }
+    pixels.show();
+    
+    
+    
+    
   }
 }
 
@@ -260,16 +282,21 @@ void setEffectLevel(int lvl){
    //Level 1 shoudl be slowest setting
    currentEffectLevel=lvl;
    
-   //the speedColorSlew represents how many milli-increments the color is skewed per milli
-   //if the slew is 1000 then the color will be slewed 1 per second.  If it is 10,000 it will be slewed 10 per second
-   //the higher the number the faster the slew
-   speedColorSlew= (MAXCOLORSLEW / EFFECTLEVELS) * lvl;
+   //the speedColorSlew represents how many millis pass before the color will be skewed 1 increment towards the next color
+   //the larger the number, the slower the slew
+   speedColorSlew= (MAXCOLORSLEW / EFFECTLEVELS) * (EFFECTLEVELS +1 -lvl );
      
    //the speedColorClimb represetns how many millis pass before it adds 1 more pixel to the set that are slewing
    //1000 means a pixel is added to the set that are slewing every second meaning the PIXELS pixel will start color slewing
    //after PIXELS seconds.
    //The LOWER the number the faster the climb
    speedColorClimb= (MAXCLIMBSPEED / EFFECTLEVELS) * (EFFECTLEVELS +1 -lvl );  //invert the multiple to be slow a 1 and fast at EFFECTSLEVELS
+   Serial.print("slewdelay=");
+   Serial.println(speedColorSlew);
+
+   Serial.print("climbdelay=");
+   Serial.println(speedColorClimb);
+   
      
 }
 
@@ -477,4 +504,5 @@ void fobHandler() {
   latest_interrupted_pin=PCintPort::arduinoPin;
   //set the variable and get out of the interrupt code
   //funky things can happen inside interrupt vectors
+
 }
