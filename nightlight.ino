@@ -20,7 +20,7 @@ Some minor #define snippets borrowed from neopixel examples
 #define FOBPINC 3
 #define FOBPIND 2
 
-#define LEDPIN 6
+#define LEDPIN 10
 #define PIXELS 52
 #define COLORPRESETS 7   //how many preset colors are there
 #define BRIGHTLEVELS 7 //how many brightness levels there are (excluding off)
