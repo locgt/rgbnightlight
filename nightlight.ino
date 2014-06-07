@@ -12,8 +12,8 @@ Some minor #define snippets borrowed from neopixel examples
 #define STATE_COLORS 1
 #define STATE_EFFECT 2
 
-//#define SLEEPTIMER  7200000 // 7200000 = 2 hours.  set to 0 to not turn off after a while
-#define SLEEPTIMER 0
+#define SLEEPTIMER  7200000 // 7200000 = 2 hours.  set to 0 to not turn off after a while
+//#define SLEEPTIMER 30000 //30 seconds for debugging
 
 #define FOBPINA 5
 #define FOBPINB 4
@@ -148,13 +148,10 @@ void setup()
   Serial.print("State: ");
   Serial.println(state);
   Serial.println("Setup complete.  In off mode.");
-//  if(state==STATE_EFFECT) { 
-    setEffectLevel(currentEffectLevel);
-    effectColorPreset=currentColorPreset;
-    initializeEffect(effectColorPreset);
-//    if(onoff)
-//          turnOn();
-//  }
+  setEffectLevel(currentEffectLevel);
+  effectColorPreset=currentColorPreset;
+  initializeEffect(effectColorPreset);
+
   
 /* color funciton debug lines
   for(int x=0; x < COLORPRESETS; x++){
@@ -182,6 +179,7 @@ void loop(){
   if(onoff == true) {
     //check the sleeptimer
     if(millis() > sleeptimer && SLEEPTIMER ) { //if SLEEPTIMER is non 0
+      Serial.println("Sleep time expired, turning off");
       turnOff();
     }
   }
