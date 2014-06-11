@@ -1,5 +1,5 @@
  /* 
-RGB Remote Nightlight v1 - Ben Miller @vmFoo 6-1-2014
+RGB Moodlight v1 - Ben Miller @vmFoo 6-1-2014
 Some minor #define snippets borrowed from neopixel examples
 
 */
@@ -81,7 +81,7 @@ void setup()
 {
   //setup the debugging if available]
   Serial.begin(19200);
-  Serial.println("RGB Remote Nightlight V1.0: Ready");
+  Serial.println("RGB Mood light V1.0: Ready");
 
   //setup the pin modes  
   pinMode(FOBPINA, INPUT); 
